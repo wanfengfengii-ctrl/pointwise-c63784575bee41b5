@@ -1,0 +1,17 @@
+{
+  "manuscript_id": "qy-oral-07",
+  "old": {
+    "revision_id": "qy-07-initial",
+    "segments": [{"segment_id": "opening", "order": 0, "words": ["A", "X"]}, {"segment_id": "reply", "order": 1, "words": ["X"]}],
+    "public_bounds": [0, 0]
+  },
+  "new": {
+    "revision_id": "qy-07-reviewed",
+    "segments": [{"segment_id": "opening", "order": 0, "words": ["X", "X"]}, {"segment_id": "reply", "order": 1, "words": ["A"]}],
+    "public_bounds": [2, 2]
+  },
+  "correction": {
+    "revision_id": "qy-07-followup",
+    "segments": [{"segment_id": "opening", "order": 0, "words": ["A", "X", "Y"]}]
+  }
+}
