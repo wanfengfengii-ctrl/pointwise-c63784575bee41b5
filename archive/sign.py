@@ -8,8 +8,11 @@ from review.results import ReviewDecision
 
 
 def sign_decision(store: ArchiveStore, decision: ReviewDecision) -> ArchiveEntry:
+    details = asdict(decision)
+    if details['delegation'] is None:
+        del details['delegation']
     report = Report(uuid4().hex, decision.packet.packet_id, decision.packet.body_digest,
-                    canonical_json(asdict(decision)))
+                    canonical_json(details))
     receipt = ArchiveReceipt(uuid4().hex, report.report_id, report.packet_id,
                              report.packet_digest, report.snapshot_digest)
     entry = ArchiveEntry(report, receipt)

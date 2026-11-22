@@ -1,16 +1,20 @@
 import hashlib
 import hmac
 import json
+import re
 from dataclasses import asdict
 
 from issue.packet import (
-    EvidencePayload, ExcerptIdentity, Packet, PacketWord, PublishedExcerpt,
-    ordered_arcs, public_matches,
+    DelegatedPacket, EvidencePayload, ExcerptIdentity, Packet, PacketWord,
+    PublishedExcerpt, ordered_arcs, public_matches,
 )
 
 
 class EnvelopeMismatch(ValueError):
     pass
+
+
+_DIGEST = re.compile(r'[0-9a-f]{64}\Z')
 
 
 def canonical_json(value: object) -> str:
@@ -21,7 +25,7 @@ def _digest(body: str) -> str:
     return hashlib.sha256(body.encode('utf-8')).hexdigest()
 
 
-def packet_digest(packet: Packet) -> str:
+def packet_digest(packet: Packet | DelegatedPacket) -> str:
     return _digest(canonical_json(asdict(packet)))
 
 
@@ -29,9 +33,27 @@ def _declaration(packet: Packet) -> dict:
     return {'packet_id': packet.packet_id, 'old': asdict(packet.old.identity), 'new': asdict(packet.new.identity)}
 
 
+def _delegated_declaration(packet: DelegatedPacket) -> dict:
+    return {
+        'packet_id': packet.packet_id,
+        'parent_packet_id': packet.parent_packet_id,
+        'parent_body_digest': packet.parent_body_digest,
+        'delegation_id': packet.delegation_id,
+        'delegation_digest': packet.delegation_digest,
+        'old': asdict(packet.old.identity),
+        'new': asdict(packet.new.identity),
+    }
+
+
 def seal_packet(packet: Packet) -> str:
     body = canonical_json(asdict(packet))
     return canonical_json({'version': 1, 'declaration': _declaration(packet), 'body': body, 'sha256': _digest(body)})
+
+
+def seal_delegated_packet(packet: DelegatedPacket) -> str:
+    body = canonical_json(asdict(packet))
+    return canonical_json({'version': 2, 'declaration': _delegated_declaration(packet),
+                           'body': body, 'sha256': _digest(body)})
 
 
 def _fields(value: object, *keys: str) -> None:
@@ -111,6 +133,27 @@ def _read_packet(data: dict) -> Packet:
     return Packet(data['packet_id'], old, new, _read_evidence(data['evidence'], old, new))
 
 
+def _read_delegated_packet(data: dict) -> DelegatedPacket:
+    _fields(data, 'packet_id', 'parent_packet_id', 'parent_body_digest', 'delegation_id',
+            'delegation_digest', 'old', 'new', 'evidence')
+    for key in ('packet_id', 'parent_packet_id', 'delegation_id'):
+        _text(data[key])
+    for key in ('parent_body_digest', 'delegation_digest'):
+        value = data[key]
+        if not isinstance(value, str) or _DIGEST.fullmatch(value) is None:
+            raise EnvelopeMismatch('delegated packet needs lowercase SHA-256 bindings')
+    if data['packet_id'] == data['parent_packet_id']:
+        raise EnvelopeMismatch('a delegated packet must use its own packet identifier')
+    old, new = _read_excerpt(data['old']), _read_excerpt(data['new'])
+    if old.identity.manuscript_id != new.identity.manuscript_id:
+        raise EnvelopeMismatch('packet sides name different manuscripts')
+    if old.identity.revision_id == new.identity.revision_id or old.identity.excerpt_id == new.identity.excerpt_id:
+        raise EnvelopeMismatch('packet requires two distinct revisions and excerpts')
+    return DelegatedPacket(data['packet_id'], data['parent_packet_id'], data['parent_body_digest'],
+                           data['delegation_id'], data['delegation_digest'], old, new,
+                           _read_evidence(data['evidence'], old, new))
+
+
 def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
     result = dict(pairs)
     if len(result) != len(pairs):
@@ -118,23 +161,29 @@ def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
-def open_envelope(envelope: str) -> Packet:
+def open_envelope(envelope: str) -> Packet | DelegatedPacket:
     try:
         if not isinstance(envelope, str):
             raise EnvelopeMismatch('envelope must be JSON text')
         outer = json.loads(envelope, object_pairs_hook=_unique_json_object)
         _fields(outer, 'version', 'declaration', 'body', 'sha256')
-        if type(outer['version']) is not int or outer['version'] != 1:
+        version = outer['version']
+        if type(version) is not int or version not in (1, 2):
             raise EnvelopeMismatch('unsupported envelope version')
         body, digest = outer['body'], outer['sha256']
         if not isinstance(body, str) or not isinstance(digest, str) or not digest.isascii():
             raise EnvelopeMismatch('missing packet body or digest')
         if not hmac.compare_digest(_digest(body), digest):
             raise EnvelopeMismatch('packet body digest does not match')
-        packet = _read_packet(json.loads(body))
+        if version == 1:
+            packet = _read_packet(json.loads(body))
+            declaration = _declaration
+        else:
+            packet = _read_delegated_packet(json.loads(body))
+            declaration = _delegated_declaration
         if body != canonical_json(asdict(packet)):
             raise EnvelopeMismatch('packet body is not in canonical form')
-        if outer['declaration'] != _declaration(packet):
+        if outer['declaration'] != declaration(packet):
             raise EnvelopeMismatch('packet declaration does not match its body')
         return packet
     except EnvelopeMismatch:

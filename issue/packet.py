@@ -42,6 +42,19 @@ class Packet:
 
 
 @dataclass(frozen=True)
+class DelegatedPacket:
+    """A version 2 packet that publishes one narrower slice of a received parent."""
+    packet_id: str
+    parent_packet_id: str
+    parent_body_digest: str
+    delegation_id: str
+    delegation_digest: str
+    old: PublishedExcerpt
+    new: PublishedExcerpt
+    evidence: EvidencePayload
+
+
+@dataclass(frozen=True)
 class PacketProvenance:
     packet_id: str
     body_digest: str

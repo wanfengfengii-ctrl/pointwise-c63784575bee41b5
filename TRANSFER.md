@@ -24,3 +24,12 @@
 - `tie` 的父件完整公开 A 与 A A。选段仅含旧 A 与新稿首个 A。无确认时代价 1，`tie-new:0` 是公开落点，同时可能没有公开落点。确认首个 A 后代价仍为 1，且该公开落点必有。
 
 保留 `python3 -B check_project.py` 原回归。沿用 `.pointwise-runtime.json` 的 v1 CLI 运行清单及 argv 格式，使 `verify` 运行原回归与转授的联动核验，核验失败返回非零退出码。让 `demo` 实际走一遍 `late` 的关源转授、独立实收、无确认与有确认的定稿及重开领取，显示实际代价、落点、父件与委托出处和原首执。
+
+## 实现说明
+
+- `issue.delegation.parse_delegation` 校验委托字段、词位与摘要，并在 `Delegation.digest` 上给出 `issue.envelope.canonical_json(delegation)` 的 SHA-256。
+- `issue.envelope` 识别 `version` 1（原父件）与 `version` 2（子件）；子件正文含 `parent_packet_id`、`parent_body_digest`、`delegation_id`、`delegation_digest`、两侧摘录和证据，声明字段与正文一一对应。
+- 子件证据的图坐标相对交付的两侧片段，代价按父片段的完整词序计算；未交付词可参与隐藏匹配，因此片外对齐仍影响代价与落点。
+- `ReceiptStore.accept(envelope, delegation=None)`：V1 封套不接受委托参数；V2 封套必须携带可核对的馆方委托，否则 `EnvelopeMismatch`。同件同委托重投（含重开）返回原 `PacketReceipt`，同号异件拒收。
+- 复审标注只引用子件旧侧词位，确认只引用子件两侧公开词位；定稿在 `details['delegation']` 固定四个绑定字段，V1 定稿不含该键，按原格式领取。
+- `transfer_check.py` 是 `check_project.py` 调用的联动核验，覆盖 `late` 与 `tie` 的完整代价、落点与重开领取。

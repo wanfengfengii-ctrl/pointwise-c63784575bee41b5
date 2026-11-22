@@ -24,6 +24,7 @@
 | I3 发行及实收 | `issue.publish.publish_packet(revisions, excerpts, old_excerpt_id, new_excerpt_id, *, packet_id=None)` 返回 V1 JSON 文本封套。离线端 `ReceiptStore.accept(envelope)` 返回原实收或新实收。`get_received(packet_id)` 返回带固定正文、封套和实收记录的 `ReceivedPacket`，未知号返回 `None`。 |
 | I4 核定 | `review.submit.submit_review(receipts, archive, request)` 返回 `ArchiveEntry`。`ReviewRequest(packet_id, annotations, confirmations=())` 含至少一条 `OldAnnotation(annotation_id, word_id)`，同一请求的标注号须唯一。`Confirmation(old_word_id, new_word_id)` 引用本件两侧公开词位，重复的同一对合并为一个约束。`entry.report.details` 返回包含裁决、请求和件出处的 JSON 对象。 |
 | I5 领取 | `archive.read.read_report(archive, report_id)` 返回原 `ArchiveEntry`，未知号返回 `None`。 |
+| I6 转授 | `issue.publish.publish_delegated_packet(receipts, parent_packet_id, delegation, old_bounds, new_bounds, *, packet_id=None)` 返回 V2 JSON 子件封套。离线端 `ReceiptStore.accept(envelope, delegation=...)` 验绑实收；定稿 `entry.report.details['delegation']` 固定父件与委托号、摘要。详见 `TRANSFER.md`。 |
 
 词位号由固定修订号和零基整稿词序组成，段内词序也从零开始。公开词位携带原段号及段内词序。两稿的配对必须原值相同、严格保序且一对一。每个未配对词项计 1，两稿相加得到精确整数代价。一次请求的全部确认共同约束一条完整对齐。每条标注的目标按新版原序去重，任一最优对齐使它未匹配或匹配到片段外时，`can_have_no_public_landing` 为真。按请求顺序输出标注。件号与账号可用于固定引用，业务代价与结论只依赖指定输入和确认。
 
@@ -36,4 +37,4 @@ python3 -B check_project.py
 python3 -B demo.py
 ```
 
-`check_project.py` 由运行控制台在物化项目时提供。直接运行完整测试包可用 `python3 -B -m unittest discover -s tests -t .`。演示使用自动清理的独立临时库和 `sample_subtitles.json`。样例无确认时签出代价 2，旧 A 可无公开落点。确认两版的 A 后签出代价 4 和新版 A。最后重开离线库，按原号领回两份定稿和原首执。
+`check_project.py` 由运行控制台在物化项目时提供。直接运行完整测试包可用 `python3 -B -m unittest discover -s tests -t .`。演示使用自动清理的独立临时库和 `sample_subtitles.json`。样例无确认时签出代价 2，旧 A 可无公开落点。确认两版的 A 后签出代价 4 和新版 A。最后重开离线库，按原号领回两份定稿和原首执。`check_project.py` 另运行 `transfer_check.py` 的转授联动核验，覆盖 `late` 与 `tie` 两个委派样例，失败时返回非零退出码。
